@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Jobs; // JobHandle을 사용하기 위해 추가
 using System.Collections.Generic;
 using DOD_ECS.Components;
 using DOD_ECS.Systems;
@@ -10,8 +11,10 @@ namespace DOD_ECS
     {
         private MovementDataSoA _movementData;
         private MovementSystem _movementSystem;
-
-        // 생성된 엔티티들을 기억하여 삭제 테스트에 사용하기 위한 리스트
+        
+        // 현재 실행 중인 멀티스레드 작업(Job)의 상태를 추적하기 위한 핸들
+        private JobHandle _movementJobHandle;
+        
         private List<Entity> _activeEntities = new List<Entity>();
         private int _nextEntityId = 1;
 
@@ -26,43 +29,52 @@ namespace DOD_ECS
                 Entity newEntity = new Entity(_nextEntityId++);
                 _activeEntities.Add(newEntity);
 
-                // 엔티티 객체 자체를 Add의 매개변수로 전달
                 _movementData.Add(
                     newEntity,
                     new Vector3(Random.Range(-10f, 10f), 0, Random.Range(-10f, 10f)),
                     new Vector3(Random.Range(-2f, 2f), 0, Random.Range(-2f, 2f))
                 );
             }
-
+            
             Debug.Log($"[DOD ECS] Initialized {_movementData.Count} entities using SoA.");
         }
 
         private void Update()
         {
-            // 삭제 테스트: 스페이스바를 누르면 특정 엔티티를 찾아서 O(1)에 삭제
+            // 주의: Update가 호출되는 시점은 이전 프레임의 LateUpdate를 거친 후이므로, 
+            // Job은 이미 100% 완료(Complete)된 상태입니다. 
+            // 따라서 이곳에서 NativeArray의 길이를 바꾸거나(추가/삭제) 데이터를 읽고 쓰는 것은 메모리 충돌 없이 안전합니다.
             if (Input.GetKeyDown(KeyCode.Space))
             {
                 if (_activeEntities.Count > 0)
                 {
-                    // 가장 앞단에 추가했던 엔티티를 하나 꺼내옴
                     Entity entityToRemove = _activeEntities[0];
                     _activeEntities.RemoveAt(0);
 
                     Debug.Log($"[DOD ECS] 엔티티(ID: {entityToRemove.Id}) 삭제 요청. 남은 수: {_movementData.Count - 1}");
-
-                    // 인덱스가 아닌 엔티티를 통째로 넘겨서 삭제
                     _movementData.Remove(entityToRemove);
                 }
             }
 
-            // 매 프레임마다 System에 데이터를 주입하여 로직 구동
-            _movementSystem.Update(_movementData, Time.deltaTime);
+            // System에 데이터를 주입하고 워커 스레드에 "예약(Schedule)"만 걸어둡니다.
+            // CPU 워커 스레드들이 백그라운드에서 병렬 연산을 시작하며, 
+            // 메인 스레드는 작업을 기다리지 않고 즉시 아래로 빠져나가 다른 로직을 처리할 수 있습니다.
+            _movementJobHandle = _movementSystem.ScheduleJob(_movementData, Time.deltaTime);
+        }
+
+        private void LateUpdate()
+        {
+            // 렌더링 직전 등 프레임의 마지막 시점에 Job이 끝날 때까지 대기합니다.
+            // 메인 스레드가 Update에서 다른 게임 로직을 처리하는 동안 
+            // 워커 스레드가 이미 연산을 끝마쳤다면 메인 스레드는 아무런 대기 시간 없이 즉시 통과하게 됩니다. (프레임 이득 극대화)
+            _movementJobHandle.Complete();
         }
 
         private void OnDestroy()
         {
-            // Unity의 Native 메모리는 C# 가비지 컬렉터(GC)가 지워주지 않으므로, 
-            // 직접 Dispose()를 호출하여 메모리 누수를 막아야 합니다.
+            // 안전장치: 컴포넌트가 파괴될 때 혹시라도 백그라운드에서 돌고 있는 Job이 있다면 
+            // 강제로 완료(Complete)시킨 뒤에 NativeArray 메모리를 해제(Dispose)해야 메모리 엑세스 충돌(Crash)이 발생하지 않습니다.
+            _movementJobHandle.Complete();
             _movementData?.Dispose();
         }
     }

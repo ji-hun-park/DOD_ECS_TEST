@@ -30,9 +30,11 @@ namespace DOD_ECS.Systems
 
     public class MovementSystem
     {
-        public void Update(MovementDataSoA movementData, float deltaTime)
+        // Update 대신 JobHandle을 반환하는 ScheduleJob으로 변경합니다.
+        // dependency 매개변수를 추가하면 여러 시스템의 Job들을 꼬리물기(체이닝) 방식으로 연결할 수 있습니다.
+        public JobHandle ScheduleJob(MovementDataSoA movementData, float deltaTime, JobHandle dependency = default)
         {
-            if (movementData.Count == 0) return;
+            if (movementData.Count == 0) return dependency;
 
             // 1. Job 구조체에 Native 데이터 연결
             MovementJob job = new MovementJob
@@ -42,12 +44,8 @@ namespace DOD_ECS.Systems
                 Positions = movementData.Positions
             };
 
-            // 2. 멀티스레드 스케줄링 (총 반복 횟수: Count, 한 스레드가 처리할 묶음(배치) 크기: 64)
-            JobHandle handle = job.Schedule(movementData.Count, 64);
-
-            // 3. 작업이 끝날 때까지 메인 스레드 대기 
-            // (실제 실무에서는 Update 초반에 Schedule 하고 LateUpdate에서 Complete 하여 대기 시간을 최소화합니다)
-            handle.Complete();
+            // 2. 멀티스레드 스케줄링 후 핸들(JobHandle)을 반환 (메인 스레드는 즉시 다음 코드로 넘어감)
+            return job.Schedule(movementData.Count, 64, dependency);
         }
     }
 }

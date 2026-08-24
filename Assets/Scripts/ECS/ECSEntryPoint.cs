@@ -10,7 +10,7 @@ namespace DOD_ECS
     {
         private MovementDataSoA _movementData;
         private MovementSystem _movementSystem;
-        
+
         // 생성된 엔티티들을 기억하여 삭제 테스트에 사용하기 위한 리스트
         private List<Entity> _activeEntities = new List<Entity>();
         private int _nextEntityId = 1;
@@ -33,7 +33,7 @@ namespace DOD_ECS
                     new Vector3(Random.Range(-2f, 2f), 0, Random.Range(-2f, 2f))
                 );
             }
-            
+
             Debug.Log($"[DOD ECS] Initialized {_movementData.Count} entities using SoA.");
         }
 
@@ -49,7 +49,7 @@ namespace DOD_ECS
                     _activeEntities.RemoveAt(0);
 
                     Debug.Log($"[DOD ECS] 엔티티(ID: {entityToRemove.Id}) 삭제 요청. 남은 수: {_movementData.Count - 1}");
-                    
+
                     // 인덱스가 아닌 엔티티를 통째로 넘겨서 삭제
                     _movementData.Remove(entityToRemove);
                 }
@@ -57,6 +57,13 @@ namespace DOD_ECS
 
             // 매 프레임마다 System에 데이터를 주입하여 로직 구동
             _movementSystem.Update(_movementData, Time.deltaTime);
+        }
+
+        private void OnDestroy()
+        {
+            // Unity의 Native 메모리는 C# 가비지 컬렉터(GC)가 지워주지 않으므로, 
+            // 직접 Dispose()를 호출하여 메모리 누수를 막아야 합니다.
+            _movementData?.Dispose();
         }
     }
 }

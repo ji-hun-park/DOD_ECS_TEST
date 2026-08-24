@@ -1,22 +1,22 @@
 using UnityEngine;
+using Unity.Collections;
 using System.Collections.Generic;
+using System;
 
 namespace DOD_ECS.Components
 {
-    // SoA (Structure of Arrays) 방식의 데이터 컨테이너
-    public class MovementDataSoA
+    // NativeArray를 사용하므로 IDisposable을 구현하여 메모리를 해제할 수 있어야 합니다.
+    public class MovementDataSoA : IDisposable
     {
         public int Capacity { get; private set; }
         public int Count { get; private set; }
 
-        // [추가됨] Entity ID를 통해 현재 배열 인덱스를 찾는 매핑 딕셔너리
         public Dictionary<int, int> EntityToIndexMap;
 
-        // [추가됨] 배열 인덱스를 통해 역으로 Entity ID를 찾는 SoA 배열 (Swap 시 필요)
-        public int[] EntityIds;
-        
-        public Vector3[] Positions;
-        public Vector3[] Velocities;
+        // C# 관리형(Managed) 배열이 아닌, Job System과 Burst Compiler가 접근할 수 있는 비관리형(Native) 메모리로 변경합니다.
+        public NativeArray<int> EntityIds;
+        public NativeArray<Vector3> Positions;
+        public NativeArray<Vector3> Velocities;
 
         public MovementDataSoA(int capacity)
         {
@@ -24,12 +24,13 @@ namespace DOD_ECS.Components
             Count = 0;
             
             EntityToIndexMap = new Dictionary<int, int>(capacity);
-            EntityIds = new int[capacity];
-            Positions = new Vector3[capacity];
-            Velocities = new Vector3[capacity];
+            
+            // Allocator.Persistent: 프로그램이 끝날 때까지 유지되는 메모리 타입 (직접 해제 필요)
+            EntityIds = new NativeArray<int>(capacity, Allocator.Persistent);
+            Positions = new NativeArray<Vector3>(capacity, Allocator.Persistent);
+            Velocities = new NativeArray<Vector3>(capacity, Allocator.Persistent);
         }
 
-        // 새로운 데이터(Entity) 추가 - 이제 Entity 정보를 직접 받습니다.
         public void Add(Entity entity, Vector3 position, Vector3 velocity)
         {
             if (Count >= Capacity)
@@ -40,47 +41,63 @@ namespace DOD_ECS.Components
             int index = Count;
             Positions[index] = position;
             Velocities[index] = velocity;
-            EntityIds[index] = entity.Id; // 역매핑 데이터 저장
+            EntityIds[index] = entity.Id;
             
-            // 딕셔너리에 매핑 추가: Entity ID -> 인덱스
             EntityToIndexMap[entity.Id] = index;
-            
             Count++;
         }
 
-        // 엔티티를 안전하게 삭제 (Swap and Pop 방식 + 매핑 갱신)
         public void Remove(Entity entity)
         {
-            // 딕셔너리에서 엔티티가 몇 번 인덱스에 있는지 O(1)로 찾음
             if (!EntityToIndexMap.TryGetValue(entity.Id, out int index)) return;
 
             int lastIndex = Count - 1;
 
-            // 지우려는 데이터가 맨 마지막 데이터가 아니라면(Swap이 필요하다면)
             if (index != lastIndex)
             {
                 Positions[index] = Positions[lastIndex];
                 Velocities[index] = Velocities[lastIndex];
                 
-                // 역방향 매핑 배열에서, 옮겨진 마지막 데이터의 Entity ID를 가져옴
                 int lastEntityId = EntityIds[lastIndex];
-                EntityIds[index] = lastEntityId; // 식별자 정보도 이동시킴
-
-                // 딕셔너리 매핑 갱신: 마지막 데이터였던 엔티티가 새로운 인덱스(원래 지워진 자리)를 가리키도록 업데이트
+                EntityIds[index] = lastEntityId;
                 EntityToIndexMap[lastEntityId] = index;
             }
 
-            // 배열에서 삭제된 엔티티의 매핑 정보를 완전히 제거
             EntityToIndexMap.Remove(entity.Id);
             Count--;
         }
 
         private void Resize(int newCapacity)
         {
-            System.Array.Resize(ref EntityIds, newCapacity);
-            System.Array.Resize(ref Positions, newCapacity);
-            System.Array.Resize(ref Velocities, newCapacity);
+            // 새 Native 메모리 할당
+            var newEntityIds = new NativeArray<int>(newCapacity, Allocator.Persistent);
+            var newPositions = new NativeArray<Vector3>(newCapacity, Allocator.Persistent);
+            var newVelocities = new NativeArray<Vector3>(newCapacity, Allocator.Persistent);
+
+            // 기존 데이터 복사 (NativeArray.Copy는 내부적으로 Memcpy를 사용하여 C# 배열 복사보다 훨씬 빠릅니다)
+            NativeArray<int>.Copy(EntityIds, newEntityIds, Count);
+            NativeArray<Vector3>.Copy(Positions, newPositions, Count);
+            NativeArray<Vector3>.Copy(Velocities, newVelocities, Count);
+
+            // 기존 메모리 해제
+            EntityIds.Dispose();
+            Positions.Dispose();
+            Velocities.Dispose();
+
+            // 참조 교체
+            EntityIds = newEntityIds;
+            Positions = newPositions;
+            Velocities = newVelocities;
+            
             Capacity = newCapacity;
+        }
+
+        // 메모리 해제 로직 (Job System 사용 시 필수)
+        public void Dispose()
+        {
+            if (EntityIds.IsCreated) EntityIds.Dispose();
+            if (Positions.IsCreated) Positions.Dispose();
+            if (Velocities.IsCreated) Velocities.Dispose();
         }
     }
 }

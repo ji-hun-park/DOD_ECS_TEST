@@ -1,21 +1,21 @@
 using UnityEngine;
-using Unity.Jobs; // JobHandle을 사용하기 위해 추가
+using Unity.Jobs;
 using System.Collections.Generic;
 using DOD_ECS.Components;
 using DOD_ECS.Systems;
 
 namespace DOD_ECS
 {
-    // Unity의 라이프사이클(MonoBehaviour)과 순수 C# 기반 ECS를 연결하는 진입점
     public class ECSEntryPoint : MonoBehaviour
     {
         private MovementDataSoA _movementData;
         private MovementSystem _movementSystem;
-        
-        // 현재 실행 중인 멀티스레드 작업(Job)의 상태를 추적하기 위한 핸들
         private JobHandle _movementJobHandle;
         
+        // 실제 유니티 Transform과 동기화하기 위한 딕셔너리 (Entity ID -> Transform)
+        private Dictionary<int, Transform> _entityToTransform = new Dictionary<int, Transform>();
         private List<Entity> _activeEntities = new List<Entity>();
+        
         private int _nextEntityId = 1;
 
         private void Start()
@@ -23,27 +23,38 @@ namespace DOD_ECS
             _movementData = new MovementDataSoA(10000);
             _movementSystem = new MovementSystem();
 
-            // 테스트용 엔티티 생성
-            for (int i = 0; i < 5000; i++)
-            {
-                Entity newEntity = new Entity(_nextEntityId++);
-                _activeEntities.Add(newEntity);
+            // 1. 베이킹(Baking) 과정: 씬에 있는 모든 Authoring 오브젝트를 수집하여 순수 데이터(SoA)로 변환
+            BakeSceneObjects();
+        }
 
-                _movementData.Add(
-                    newEntity,
-                    new Vector3(Random.Range(-10f, 10f), 0, Random.Range(-10f, 10f)),
-                    new Vector3(Random.Range(-2f, 2f), 0, Random.Range(-2f, 2f))
-                );
+        private void BakeSceneObjects()
+        {
+            // 씬에 존재하는 모든 EntityAuthoring 컴포넌트를 찾습니다.
+            EntityAuthoring[] authoringObjects = FindObjectsOfType<EntityAuthoring>();
+            
+            foreach (var auth in authoringObjects)
+            {
+                if (auth.IsBaked) continue;
+
+                // 새로운 ECS Entity 발급
+                Entity newEntity = new Entity(_nextEntityId++);
+                auth.BakedEntity = newEntity;
+                auth.IsBaked = true;
+
+                _activeEntities.Add(newEntity);
+                
+                // 유니티 렌더링 동기화를 위해 Transform 저장
+                _entityToTransform[newEntity.Id] = auth.transform;
+
+                // 순수 데이터 공간(SoA)에 GameObject의 Transform 정보 및 Authoring 정보를 베이킹(복사)
+                _movementData.Add(newEntity, auth.transform.position, auth.initialVelocity);
             }
             
-            Debug.Log($"[DOD ECS] Initialized {_movementData.Count} entities using SoA.");
+            Debug.Log($"[DOD ECS] {authoringObjects.Length}개의 유니티 오브젝트를 ECS 엔티티로 베이킹 완료.");
         }
 
         private void Update()
         {
-            // 주의: Update가 호출되는 시점은 이전 프레임의 LateUpdate를 거친 후이므로, 
-            // Job은 이미 100% 완료(Complete)된 상태입니다. 
-            // 따라서 이곳에서 NativeArray의 길이를 바꾸거나(추가/삭제) 데이터를 읽고 쓰는 것은 메모리 충돌 없이 안전합니다.
             if (Input.GetKeyDown(KeyCode.Space))
             {
                 if (_activeEntities.Count > 0)
@@ -51,29 +62,46 @@ namespace DOD_ECS
                     Entity entityToRemove = _activeEntities[0];
                     _activeEntities.RemoveAt(0);
 
-                    Debug.Log($"[DOD ECS] 엔티티(ID: {entityToRemove.Id}) 삭제 요청. 남은 수: {_movementData.Count - 1}");
+                    // 1. 순수 ECS 데이터 삭제 (Swap and Pop)
                     _movementData.Remove(entityToRemove);
+                    
+                    // 2. 실제 유니티 GameObject 파괴
+                    if (_entityToTransform.TryGetValue(entityToRemove.Id, out Transform t))
+                    {
+                        Destroy(t.gameObject);
+                        _entityToTransform.Remove(entityToRemove.Id);
+                        Debug.Log($"[DOD ECS] 유니티 오브젝트 및 ECS 엔티티 동시 삭제 완료 (ID: {entityToRemove.Id})");
+                    }
                 }
             }
 
-            // System에 데이터를 주입하고 워커 스레드에 "예약(Schedule)"만 걸어둡니다.
-            // CPU 워커 스레드들이 백그라운드에서 병렬 연산을 시작하며, 
-            // 메인 스레드는 작업을 기다리지 않고 즉시 아래로 빠져나가 다른 로직을 처리할 수 있습니다.
+            // Job 예약 (백그라운드 계산 시작)
             _movementJobHandle = _movementSystem.ScheduleJob(_movementData, Time.deltaTime);
         }
 
         private void LateUpdate()
         {
-            // 렌더링 직전 등 프레임의 마지막 시점에 Job이 끝날 때까지 대기합니다.
-            // 메인 스레드가 Update에서 다른 게임 로직을 처리하는 동안 
-            // 워커 스레드가 이미 연산을 끝마쳤다면 메인 스레드는 아무런 대기 시간 없이 즉시 통과하게 됩니다. (프레임 이득 극대화)
+            // Job 완료 대기
             _movementJobHandle.Complete();
+
+            // --- [동기화 과정] ---
+            // 워커 스레드(Job)가 계산해놓은 순수 NativeArray 위치 데이터를 
+            // 실제 눈에 보이는 유니티 GameObject의 Transform에 적용(Sync)합니다.
+            // 메인 스레드에서 수행해야 하므로 Job 완료 이후인 LateUpdate에서 진행합니다.
+            int count = _movementData.Count;
+            for (int i = 0; i < count; i++)
+            {
+                int entityId = _movementData.EntityIds[i];
+                if (_entityToTransform.TryGetValue(entityId, out Transform t))
+                {
+                    // SoA 데이터를 GameObject Transform에 복사
+                    t.position = _movementData.Positions[i];
+                }
+            }
         }
 
         private void OnDestroy()
         {
-            // 안전장치: 컴포넌트가 파괴될 때 혹시라도 백그라운드에서 돌고 있는 Job이 있다면 
-            // 강제로 완료(Complete)시킨 뒤에 NativeArray 메모리를 해제(Dispose)해야 메모리 엑세스 충돌(Crash)이 발생하지 않습니다.
             _movementJobHandle.Complete();
             _movementData?.Dispose();
         }

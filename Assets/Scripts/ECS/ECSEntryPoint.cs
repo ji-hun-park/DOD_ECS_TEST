@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 using DOD_ECS.Components;
 using DOD_ECS.Systems;
 
@@ -9,36 +10,48 @@ namespace DOD_ECS
     {
         private MovementDataSoA _movementData;
         private MovementSystem _movementSystem;
+        
+        // 생성된 엔티티들을 기억하여 삭제 테스트에 사용하기 위한 리스트
+        private List<Entity> _activeEntities = new List<Entity>();
+        private int _nextEntityId = 1;
 
         private void Start()
         {
-            // 1. SoA 데이터 컨테이너 초기화 (충분한 메모리 미리 할당)
             _movementData = new MovementDataSoA(10000);
-
-            // 2. 시스템 초기화
             _movementSystem = new MovementSystem();
 
-            // 3. 테스트용 엔티티 데이터 생성
+            // 테스트용 엔티티 생성
             for (int i = 0; i < 5000; i++)
             {
+                Entity newEntity = new Entity(_nextEntityId++);
+                _activeEntities.Add(newEntity);
+
+                // 엔티티 객체 자체를 Add의 매개변수로 전달
                 _movementData.Add(
+                    newEntity,
                     new Vector3(Random.Range(-10f, 10f), 0, Random.Range(-10f, 10f)),
                     new Vector3(Random.Range(-2f, 2f), 0, Random.Range(-2f, 2f))
                 );
             }
-
+            
             Debug.Log($"[DOD ECS] Initialized {_movementData.Count} entities using SoA.");
         }
 
         private void Update()
         {
-            // 삭제 테스트: 스페이스바를 누르면 0번 인덱스의 엔티티(데이터) 안전 삭제
+            // 삭제 테스트: 스페이스바를 누르면 특정 엔티티를 찾아서 O(1)에 삭제
             if (Input.GetKeyDown(KeyCode.Space))
             {
-                if (_movementData.Count > 0)
+                if (_activeEntities.Count > 0)
                 {
-                    Debug.Log($"[DOD ECS] 맨 앞 엔티티 삭제 처리(Swap and Pop). 남은 수: {_movementData.Count - 1}");
-                    _movementData.RemoveAt(0);
+                    // 가장 앞단에 추가했던 엔티티를 하나 꺼내옴
+                    Entity entityToRemove = _activeEntities[0];
+                    _activeEntities.RemoveAt(0);
+
+                    Debug.Log($"[DOD ECS] 엔티티(ID: {entityToRemove.Id}) 삭제 요청. 남은 수: {_movementData.Count - 1}");
+                    
+                    // 인덱스가 아닌 엔티티를 통째로 넘겨서 삭제
+                    _movementData.Remove(entityToRemove);
                 }
             }
 
@@ -47,4 +60,3 @@ namespace DOD_ECS
         }
     }
 }
-

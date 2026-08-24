@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem; // New Input System 사용을 위해 추가
 using Unity.Jobs;
 using System.Collections.Generic;
 using DOD_ECS.Components;
@@ -11,11 +12,11 @@ namespace DOD_ECS
         private MovementDataSoA _movementData;
         private MovementSystem _movementSystem;
         private JobHandle _movementJobHandle;
-        
+
         // 실제 유니티 Transform과 동기화하기 위한 딕셔너리 (Entity ID -> Transform)
         private Dictionary<int, Transform> _entityToTransform = new Dictionary<int, Transform>();
         private List<Entity> _activeEntities = new List<Entity>();
-        
+
         private int _nextEntityId = 1;
 
         private void Start()
@@ -31,7 +32,7 @@ namespace DOD_ECS
         {
             // 씬에 존재하는 모든 EntityAuthoring 컴포넌트를 찾습니다.
             EntityAuthoring[] authoringObjects = FindObjectsOfType<EntityAuthoring>();
-            
+
             foreach (var auth in authoringObjects)
             {
                 if (auth.IsBaked) continue;
@@ -42,20 +43,21 @@ namespace DOD_ECS
                 auth.IsBaked = true;
 
                 _activeEntities.Add(newEntity);
-                
+
                 // 유니티 렌더링 동기화를 위해 Transform 저장
                 _entityToTransform[newEntity.Id] = auth.transform;
 
                 // 순수 데이터 공간(SoA)에 GameObject의 Transform 정보 및 Authoring 정보를 베이킹(복사)
                 _movementData.Add(newEntity, auth.transform.position, auth.initialVelocity);
             }
-            
+
             Debug.Log($"[DOD ECS] {authoringObjects.Length}개의 유니티 오브젝트를 ECS 엔티티로 베이킹 완료.");
         }
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Space))
+            // 구버전 Input 대신 New Input System의 Keyboard를 사용하여 입력을 감지합니다.
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
                 if (_activeEntities.Count > 0)
                 {
@@ -64,7 +66,7 @@ namespace DOD_ECS
 
                     // 1. 순수 ECS 데이터 삭제 (Swap and Pop)
                     _movementData.Remove(entityToRemove);
-                    
+
                     // 2. 실제 유니티 GameObject 파괴
                     if (_entityToTransform.TryGetValue(entityToRemove.Id, out Transform t))
                     {

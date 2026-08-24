@@ -151,7 +151,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -5, y: 0, z: -5}
 --- !u!65 &8579824
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -1537,7 +1537,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -4, y: 0, z: -4}
 --- !u!65 &159597153
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -3816,7 +3816,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -3, y: 0, z: -3}
 --- !u!65 &632465257
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -8352,7 +8352,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -2, y: 0, z: -2}
 --- !u!65 &1260710150
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -12762,7 +12762,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -1, y: 0, z: -1}
 --- !u!65 &1774126767
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -14193,7 +14193,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -10, y: 0, z: -10}
 --- !u!65 &1933502887
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -15453,7 +15453,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80368cd5156720e4899aa8d4779ef4d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DOD_ECS.EntityAuthoring
-  initialVelocity: {x: 1, y: 0, z: 1}
+  initialVelocity: {x: -1, y: 0, z: -1}
 --- !u!65 &2147390107
 BoxCollider:
   m_ObjectHideFlags: 0

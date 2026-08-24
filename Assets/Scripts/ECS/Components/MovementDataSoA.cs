@@ -41,6 +41,31 @@ namespace DOD_ECS.Components
             return index; // 부여된 인덱스가 곧 Entity와 연결되는 데이터 매핑 인덱스입니다.
         }
 
+        // 데이터 안전 삭제 (Swap and Pop 방식)
+        // 배열 중간의 데이터를 지울 때 뒤의 데이터를 한 칸씩 당기면 O(N)의 오버헤드가 발생합니다.
+        // 이를 방지하기 위해 맨 마지막 데이터를 지워진 자리로 옮겨서(덮어쓰기) O(1)에 처리합니다.
+        // 메모리 파편화(Fragmentation)가 발생하지 않아 연속된 메모리가 보장되고 페이지 폴트를 방지합니다.
+        public void RemoveAt(int index)
+        {
+            if (index < 0 || index >= Count) return;
+
+            int lastIndex = Count - 1;
+
+            // 지우려는 데이터가 맨 마지막 데이터가 아니라면, 마지막 데이터를 빈자리로 가져옴(Swap)
+            if (index != lastIndex)
+            {
+                Positions[index] = Positions[lastIndex];
+                Velocities[index] = Velocities[lastIndex];
+                IsAlive[index] = IsAlive[lastIndex];
+
+                // (참고) 만약 외부에서 Entity ID로 인덱스를 찾고 있다면, 여기서 인덱스 매핑을 갱신해 주어야 합니다.
+            }
+
+            // 맨 끝 데이터는 논리적으로 삭제됨 (Pop)
+            IsAlive[lastIndex] = false;
+            Count--;
+        }
+
         // 배열 꽉 찼을 때 크기 확장
         private void Resize(int newCapacity)
         {

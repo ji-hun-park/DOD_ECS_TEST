@@ -32,6 +32,16 @@ namespace DOD_ECS
 
         private void Update()
         {
+            // 삭제 테스트: 스페이스바를 누르면 0번 인덱스의 엔티티(데이터) 안전 삭제
+            if (Input.GetKeyDown(KeyCode.Space))
+            {
+                if (_movementData.Count > 0)
+                {
+                    Debug.Log($"[DOD ECS] 맨 앞 엔티티 삭제 처리(Swap and Pop). 남은 수: {_movementData.Count - 1}");
+                    _movementData.RemoveAt(0);
+                }
+            }
+
             // 매 프레임마다 System에 데이터를 주입하여 로직 구동
             _movementSystem.Update(_movementData, Time.deltaTime);
         }
